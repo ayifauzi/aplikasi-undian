@@ -56,7 +56,6 @@
         transform-origin: center;
         transition: transform 0.25s ease;
       }
-      /* glow when reveal */
       .reveal {
         animation: pop 0.8s cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
       }
@@ -75,7 +74,6 @@
           opacity: 1;
         }
       }
-
       .controls {
         margin-top: 18px;
       }
@@ -100,7 +98,6 @@
         background: linear-gradient(90deg, #4d8cff, #2a63d6);
         color: white;
       }
-
       .meta {
         display: flex;
         gap: 12px;
@@ -114,7 +111,6 @@
         border-radius: 999px;
         color: var(--muted);
       }
-
       .history {
         margin-top: 18px;
         text-align: left;
@@ -143,8 +139,6 @@
         border-radius: 8px;
         font-weight: 700;
       }
-
-      /* confetti canvas full */
       canvas#confetti {
         position: absolute;
         left: 0;
@@ -154,14 +148,16 @@
         pointer-events: none;
         border-radius: 18px;
       }
-
-      /* responsive */
       @media (max-width: 700px) {
         #display {
           font-size: 72px;
           padding: 24px;
           min-height: 120px;
         }
+      }
+      .header img {
+        display: block;
+        margin: 0 auto 8px;
       }
     </style>
   </head>
@@ -174,6 +170,7 @@
           <h1 style="font-size: 36px; margin: 4px 0 6px; letter-spacing: 1px; color: #ffd166; text-shadow: 0 0 8px rgba(255, 209, 102, 0.4)">HUT ke-80 PGRI Tahun 2025</h1>
           <h2 style="margin: 0; font-weight: 400; font-size: 20px; color: #d8e3f0; letter-spacing: 0.5px">Undian 1–72 — Hari Guru Nasional</h2>
         </div>
+
         <div id="display">--</div>
 
         <div class="controls">
@@ -234,7 +231,6 @@
         o.stop(audioCtx.currentTime + duration + 0.02);
       }
       function chime() {
-        // small chord
         const freqs = [660, 880, 1100];
         const duration = 0.6;
         freqs.forEach((f, i) => {
@@ -299,7 +295,57 @@
         if (confettiPieces.length > 0) requestAnimationFrame(drawConfetti);
       }
 
-      // Initialize peserta list
+      // --- Save & Load State (localStorage) ---
+      function saveState() {
+        const state = {
+          peserta: peserta,
+          history: Array.from(document.querySelectorAll("#historyList .pill")).map((p) => p.innerText),
+          last: lastPicked.innerText,
+          display: display.innerText,
+        };
+        localStorage.setItem("undianState", JSON.stringify(state));
+      }
+
+      function loadState() {
+        const raw = localStorage.getItem("undianState");
+        if (!raw) return false;
+        try {
+          const s = JSON.parse(raw);
+          peserta = Array.isArray(s.peserta) ? s.peserta : [];
+          historyList.innerHTML = "";
+          (s.history || []).forEach((num) => {
+            const d = document.createElement("div");
+            d.className = "pill";
+            d.innerText = num;
+            historyList.appendChild(d);
+          });
+          lastPicked.innerText = s.last || "Terakhir: —";
+          display.innerText = s.display || "--";
+          updateBadges();
+          return true;
+        } catch (e) {
+          console.log("Load error", e);
+          return false;
+        }
+      }
+
+      // --- Buttons
+      const saveBtn = document.createElement("button");
+      saveBtn.id = "saveBtn";
+      saveBtn.innerText = "Simpan Hasil";
+      saveBtn.style.background = "linear-gradient(90deg,#ffa600,#ff7b00)";
+      saveBtn.style.color = "white";
+      document.querySelector(".controls").appendChild(saveBtn);
+      saveBtn.addEventListener("click", () => {
+        saveState();
+        alert("Hasil disimpan ke browser (localStorage).");
+      });
+
+      // Init
+      // First try to load previous state; if none, initialize full peserta list
+      const loaded = loadState();
+      if (!loaded) initPeserta();
+
       function initPeserta() {
         peserta = [];
         for (let i = 1; i <= 72; i++) peserta.push(i);
@@ -317,7 +363,6 @@
         const pill = document.createElement("div");
         pill.className = "pill";
         pill.innerText = num;
-        // append to end (first picked at left) — keep max 72
         historyList.appendChild(pill);
       }
 
@@ -328,25 +373,20 @@
           alert("Semua nomor sudah keluar. Tekan Reset jika ingin mulai ulang.");
           return;
         }
-        // resume audio context on some browsers
         if (audioCtx.state === "suspended") await audioCtx.resume();
 
         rolling = true;
         display.classList.remove("reveal");
 
-        // fast rolling ticks
         interval = setInterval(() => {
           const acak = peserta[Math.floor(Math.random() * peserta.length)];
           display.innerText = acak;
           tickSound(0.01, 900, 0.04);
-          // subtle scale effect
           display.style.transform = `scale(${1 + Math.random() * 0.06})`;
         }, 70);
 
-        // longer duration to feel dramatic
         setTimeout(() => {
           clearInterval(interval);
-          // pick final
           const index = Math.floor(Math.random() * peserta.length);
           const terpilih = peserta[index];
           peserta.splice(index, 1);
@@ -359,6 +399,8 @@
           chime();
           spawnConfetti();
           rolling = false;
+          // auto-save after pick
+          saveState();
         }, 2600);
       }
 
@@ -389,32 +431,27 @@
       // Reset function
       function resetAll() {
         if (rolling && !confirm("Proses undian sedang berjalan. Anda yakin ingin menghentikan dan mereset?")) return;
-        // stop any ongoing rolling/timers
         if (interval) {
           clearInterval(interval);
           interval = null;
         }
         rolling = false;
-        // clear confetti
         confettiPieces = [];
         ctx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
-        // reset UI
         historyList.innerHTML = "";
         display.classList.remove("reveal");
         display.style.transform = "scale(1)";
         display.innerText = "--";
         lastPicked.innerText = "Terakhir: —";
-        // reinit peserta
         initPeserta();
+        // clear saved state too
+        localStorage.removeItem("undianState");
       }
 
       // Attach events
       startBtn.addEventListener("click", startUndian);
       sampleBtn.addEventListener("click", sampleRun);
       resetBtn.addEventListener("click", resetAll);
-
-      // Init
-      initPeserta();
     </script>
   </body>
 </html>
